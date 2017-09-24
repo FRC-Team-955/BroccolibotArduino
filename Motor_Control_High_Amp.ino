@@ -1,6 +1,8 @@
 #include <PID_v1.h>
 #include <Encoder.h>
 
+#define LIMIT_SWITCH 2
+
 #define RPWM 5
 #define LPWM 6
 #define L_EN 7
@@ -10,24 +12,17 @@
 #define ENC_B 13
 
 #define MIN_PWM 0
+#define MAX_PWM 150
 
-double Setpoint, PID_In, PID_Out;
+double Setpoint=0, PID_In, PID_Out;
 //double Kp=0.2, Ki=0, Kd=0.008; //100
 double Kp=0.1, Ki=0, Kd=0.008; //100
 
-//PID reader
+//PID
 PID pid(&PID_In, &PID_Out, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 //Quadrature encoder reader
 Encoder quad(ENC_A, ENC_B);
-
-void read_one_sec() {
-	for (int i = 0; i < 1000; i++) {
-		delay(1);
-		quad.read();
-	}
-	Serial.println(quad.read());		
-}
 
 void multi_direction (int magnitude) {
 	if (abs(magnitude) > MIN_PWM) {
@@ -43,34 +38,37 @@ void multi_direction (int magnitude) {
 
 void setup() {
 	Serial.begin(115200);
+	Serial.setTimeout(1);
 	quad.write(0);
-	for (int i = 5; i < 9; i++) {
-		pinMode(i, OUTPUT);
-		digitalWrite(i, LOW);
-	}
+
+	pinMode(RPWM, OUTPUT);
+	pinMode(LPWM, OUTPUT);
+	digitalWrite(RPWM, LOW);
+	digitalWrite(LPWM, LOW);
+
+	pinMode(R_EN, OUTPUT);
+	pinMode(L_EN, OUTPUT);
 	digitalWrite(R_EN, HIGH);
 	digitalWrite(L_EN, HIGH);
-	pid.SetMode(AUTOMATIC);
-	pid.SetOutputLimits(-150, 150);
-	pid.SetSampleTime(1);
 
-	Setpoint = 10000;
+	pinMode(ENC_A, INPUT);
+	pinMode(ENC_B, INPUT);
+
+	pinMode(LIMIT_SWITCH, INPUT);
+
+	pid.SetMode(AUTOMATIC);
+	pid.SetOutputLimits(-MAX_PWM, MAX_PWM);
+	pid.SetSampleTime(5);
 }
-int frame = 0;
+
 void loop() {
 	PID_In = quad.read();
 	pid.Compute();
-	/*
-	if (frame % 1000 == 0) {
-		Serial.print("Encoder: ");
-		Serial.print(PID_In);
-		Serial.print(" Pid Output: ");
-		Serial.print(PID_Out);
-		Serial.println();
-	}
-	*/
 	multi_direction(PID_Out);
-	frame++;
+}
+
+void serialEvent () {
+	Setpoint = Serial.parseInt();
 }
 
 //TODO: Add interrupt for limit switch
