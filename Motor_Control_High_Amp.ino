@@ -4,7 +4,7 @@
 //Limit switch settings
 //Has to be pin 2 or 3 (interrupt pins)
 #define LIMIT_SWITCH 2
-#define HOME_PWM -10 //How fast should we home?
+#define HOME_PWM -60 //How fast should we home?
 
 //Motor controller pins
 #define RPWM 5
@@ -13,16 +13,16 @@
 #define R_EN 8
 
 //Wheel PWM pins
-#define WHEEL_FRONT 9
-#define WHEEL_BACK 10
+#define WHEEL_LEFT 9
+#define WHEEL_RIGHT 10
 
 //Encoder pins
-#define ENC_A 12
-#define ENC_B 13
+#define ENC_A 13
+#define ENC_B 12
 
 //Minimum and maximum possible PWM values
 #define MIN_PWM 0
-#define MAX_PWM 150
+#define MAX_PWM 80
 
 //What should set the serial line into mode rather than regular operation
 #define MODE_SET -32000
@@ -30,12 +30,14 @@
 //What mode is home
 #define HOME_MODE 1
 
-//What input values do we accept?
-#define SAFE_BOUND_LOWER 0
-#define SAFE_BOUND_UPPER 32766
+//What input values do we accept? (MM)
+#define SAFE_BOUND_LOWER 25
+#define SAFE_BOUND_UPPER 280
 
-int front_pwm_speed = 0;
-int back_pwm_speed = 0;
+#define MM_TO_ENC_CONV 20.83
+
+int left_pwm_speed = 0;
+int right_pwm_speed = 0;
 
 //What type of input are we taking?
 enum Input_state {
@@ -46,8 +48,8 @@ enum Input_state {
 enum Input_state_key {
 	none = 0,
 	home_key = 1, //Start homing
-	front_pwm_key = 2, //Change front pwm
-	back_pwm_key = 3, //Change back pwm
+	left_pwm_key = 2, //Change left pwm
+	right_pwm_key = 3, //Change right pwm
 } input_state_key;
 
 enum Movement_state {
@@ -56,7 +58,7 @@ enum Movement_state {
 } movement_state;
 
 double Setpoint=0, PID_In, PID_Out;
-double Kp=0.1, Ki=0, Kd=0.008; //100
+double Kp=0.4, Ki=0.08, Kd=0.020; //100
 
 //PID
 PID pid(&PID_In, &PID_Out, &Setpoint, Kp, Ki, Kd, DIRECT);
@@ -77,13 +79,14 @@ void multi_direction (int magnitude) {
 	}
 }
 
-//Stop homing, set encoder position to zero, and go back to normal operation
+//Stop homing, set encoder position to zero, and go right to normal operation
 void stop_homing () {
 	if (movement_state == home) {
 		multi_direction(0);
 		movement_state = idle;
 		quad.write(0);
 	}
+	Serial.println("STOP HOMING");
 }
 
 void setup() {
@@ -91,10 +94,10 @@ void setup() {
 	Serial.setTimeout(5); //Set if serial is too slow
 	quad.write(0);
 
-	pinMode(WHEEL_FRONT, OUTPUT);
-	pinMode(WHEEL_BACK, OUTPUT);
-	digitalWrite(WHEEL_FRONT, LOW);
-	digitalWrite(WHEEL_BACK, LOW);
+	pinMode(WHEEL_LEFT, OUTPUT);
+	pinMode(WHEEL_RIGHT, OUTPUT);
+	digitalWrite(WHEEL_LEFT, LOW);
+	digitalWrite(WHEEL_RIGHT, LOW);
 
 	pinMode(RPWM, OUTPUT);
 	pinMode(LPWM, OUTPUT);
@@ -112,7 +115,7 @@ void setup() {
 	pinMode(ENC_A, INPUT);
 	pinMode(ENC_B, INPUT);
 
-	//pinMode(LIMIT_SWITCH, INPUT);
+	//Limit switch pullup
 	pinMode(LIMIT_SWITCH, INPUT_PULLUP);
 
 	pid.SetMode(AUTOMATIC);
@@ -136,7 +139,7 @@ void loop() {
 			break;
 
 		default: //How did we get here?!
-			movement_state = idle; //Go back to something sane
+			movement_state = idle; //Go right to something sane
 			break;
 	}	
 }
@@ -154,7 +157,7 @@ void serialEvent () {
 	switch (input_state) {
 		case regular: //Take input as setpoints
 			if (input <= SAFE_BOUND_UPPER && input >= SAFE_BOUND_LOWER) {
-				Setpoint = input;
+				Setpoint = ((float)input * MM_TO_ENC_CONV);
 			}
 			break;
 
@@ -171,12 +174,12 @@ void serialEvent () {
 					input_state = regular;
 					break;
 
-				case front_pwm_key:
-					analogWrite(WHEEL_FRONT, input);
+				case left_pwm_key:
+					analogWrite(WHEEL_LEFT, input);
 					break;
 
-				case back_pwm_key:
-					analogWrite(WHEEL_BACK, input);
+				case right_pwm_key:
+					analogWrite(WHEEL_RIGHT, input);
 					break;
 
 				default:
@@ -186,7 +189,7 @@ void serialEvent () {
 			}
 
 		default: //How did we get here?!
-			//Go back to something sane
+			//Go right to something sane
 			input_state = regular; 
 			input_state_key = none;
 			break;
